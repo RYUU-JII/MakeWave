@@ -1,0 +1,384 @@
+.wave-editor-outer {
+  --wave-sidebar-width: 320px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  position: relative;
+  padding: 20px 16px;
+  transition: padding-right 0.12s ease-out;
+}
+
+.wave-editor-outer.with-sidebar {
+  padding-right: calc(var(--wave-sidebar-width) + 16px);
+}
+
+.wave-editor-container {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  min-height: 360px;
+  overflow: hidden;
+  background: #fdf5e6;
+  border-radius: 20px;
+  transition: width 0.12s ease-out, height 0.12s ease-out;
+}
+
+.wave-editor-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.wave-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: var(--wave-sidebar-width);
+  height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border-left: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  font-family: 'Noto Sans KR', 'Pretendard', sans-serif;
+  color: #1a1a1a;
+  z-index: 100;
+}
+
+.sidebar-header {
+  padding: 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sidebar-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.play-toggle {
+  background: #1a3a5f;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  min-width: 54px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.play-toggle.paused {
+  background: #d1711f;
+}
+
+.wave-sidebar section {
+  padding: 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  overflow: visible;
+}
+
+.section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #666;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 130px;
+  overflow-y: auto;
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.layer-item:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.layer-item.active {
+  background: rgba(26, 58, 95, 0.12);
+}
+
+.layer-color-preview {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  margin-right: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.layer-name {
+  flex: 1;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icon-btn {
+  background: #f3f3f3;
+  border: 1px solid #ddd;
+  color: #444;
+  font-size: 10px;
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: #ececec;
+}
+
+.delete-layer-item-btn {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.layer-item:hover .delete-layer-item-btn {
+  opacity: 1;
+}
+
+.prop-group {
+  margin-bottom: 10px;
+}
+
+.prop-group label {
+  display: block;
+  font-size: 10px;
+  color: #777;
+  margin-bottom: 3px;
+}
+
+.prop-group input[type='text'],
+.prop-group input[name='id'],
+.prop-group input[name='color'],
+.color-input-wrapper input[type='text'] {
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.color-input-wrapper {
+  display: flex;
+  gap: 4px;
+}
+
+.color-input-wrapper input[type='color'] {
+  width: 30px;
+  height: 28px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0;
+}
+
+.range-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.range-wrapper input[type='range'] {
+  flex: 1;
+}
+
+.range-wrapper span {
+  font-size: 10px;
+  min-width: 32px;
+  text-align: right;
+}
+
+.checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.sens-btn {
+  width: 100%;
+  padding: 5px;
+  font-size: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #f9f9f9;
+}
+
+.sens-btn.low {
+  background: #1a3a5f;
+  color: #fff;
+}
+
+.point-color-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.point-guide-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #444;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.sidebar-footer {
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.02);
+  display: flex;
+  gap: 6px;
+}
+
+.json-btn,
+.sidebar-add-btn {
+  flex: 1;
+  padding: 8px;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sidebar-add-btn {
+  background: #1a3a5f;
+}
+
+.json-btn {
+  background: #27313f;
+}
+
+.export-message {
+  margin: 0 10px 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #1f4f2a;
+  background: #e3f5e6;
+  border: 1px solid #c3e8c8;
+}
+
+.shortcut-legend {
+  position: absolute;
+  bottom: 60px;
+  left: 10px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(4px);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 90;
+}
+
+.shortcut-item {
+  font-size: 10px;
+  color: #555;
+  white-space: nowrap;
+}
+
+.shortcut-item span {
+  font-weight: 700;
+  color: #1a3a5f;
+  margin-right: 6px;
+  background: rgba(26, 58, 95, 0.08);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.edit-toggle-btn {
+  position: absolute;
+  bottom: 18px;
+  right: 18px;
+  background: #1a3a5f;
+  color: #fff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(26, 58, 95, 0.3);
+  z-index: 101;
+}
+
+.edit-toggle-btn:hover {
+  transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+  .wave-editor-outer.with-sidebar {
+    padding-right: 10px;
+    padding-bottom: 56vh;
+  }
+
+  .wave-editor-outer {
+    padding: 10px;
+  }
+
+  .wave-editor-container {
+    border-radius: 14px;
+  }
+
+  .wave-sidebar {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: 100%;
+    height: 55vh;
+    max-height: 55vh;
+    border-left: none;
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 14px 14px 0 0;
+  }
+
+  .shortcut-legend {
+    left: 10px;
+    right: 10px;
+    width: auto;
+  }
+
+  .edit-toggle-btn {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+  }
+}
