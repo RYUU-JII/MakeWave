@@ -15,6 +15,7 @@ export interface WaveNode {
 export interface WaveLayer {
   id: string;
   color: string;
+  opacity: number;
   offsetY: number;
   speed: number;
   ridgeNodes: WaveNode[];
@@ -43,7 +44,7 @@ export type DragTarget = NodeTarget;
 export type Sensitivity = 'normal' | 'low';
 
 export interface CanvasSettings {
-  widthPercent: number;
+  widthPx: number;
   heightPx: number;
   showGrid: boolean;
 }
@@ -75,6 +76,14 @@ export interface ControlColorGuide {
   segmentHover: string;
 }
 
+export interface ReferenceImage {
+  url: string;
+  width: number;
+  height: number;
+  opacity: number;
+  visible: boolean;
+}
+
 export interface WaveExportPayload {
   schemaVersion: 'ukiyoe-wave/v1';
   exportedAt: string;
@@ -84,4 +93,5 @@ export interface WaveExportPayload {
   animation: AnimationSettings;
   editor: EditorSettings;
   layers: WaveLayer[];
+  referenceImage?: ReferenceImage;
 }

@@ -1,9 +1,10 @@
 .wave-editor-outer {
   --wave-sidebar-width: 320px;
   width: 100%;
+  min-height: 100vh;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   position: relative;
   padding: 20px 16px;
   transition: padding-right 0.12s ease-out;
@@ -249,10 +250,23 @@
 }
 
 .legend-dot {
-  width: 10px;
+  width: 100px;
   height: 10px;
   border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.reference-image-section .upload-container {
+  padding: 16px;
+  border: 2px dashed rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+}
+
+.reference-image-section .upload-container:hover {
+  border-color: #1a3a5f;
+  background: rgba(26, 58, 95, 0.05);
 }
 
 .sidebar-footer {
