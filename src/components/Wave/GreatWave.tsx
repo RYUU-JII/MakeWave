@@ -13,17 +13,28 @@ import {
 } from './waveDefaults';
 import { getDistToCubicBezier, splitCubicBezier } from './waveGeometry';
 import { createWaveExportPayload } from './waveExport';
+import {
+  WS_MARGIN,
+  clamp01,
+  drawCompositionGuides,
+  drawGrid,
+  drawLayerPath,
+  drawRibTextures,
+  getHeave,
+  getX,
+  getY,
+  work,
+} from './rendering/waveCanvas';
 import type {
   HitTarget,
   LayerPropField,
   NodeListType,
-  WaveLayer,
   WaveNode,
 } from './waveTypes';
 import { useWaveEditor } from './hooks/useWaveEditor';
 import { WaveSidebar } from './components/Sidebar/WaveSidebar';
 import { ShortcutLegend } from './components/ShortcutLegend';
-
+  
 const WS_MARGIN = 70;
 const work = (total: number) => Math.max(1, total - 2 * WS_MARGIN);
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -350,14 +361,10 @@ const GreatWave: React.FC = () => {
         ctx.globalAlpha = (showControlsRef.current ? (isActive ? 1 : 0.2) : 1) * layer.opacity;
         const heave = getHeave(totalElapsedRef.current, layer.speed);
         const offsetY = layer.offsetY;
-        const ridgeStart = layer.ridgeNodes[0];
-        if (!ridgeStart) return;
-
-        ctx.beginPath();
+        const pathReady = drawLayerPath(ctx, layer, logicalWidth, logicalHeight, offsetY, heave);
+        if (!pathReady) return;
         ctx.fillStyle = layer.color;
-        ctx.moveTo(getX(0, logicalWidth), logicalHeight);
-        ctx.lineTo(getX(0, logicalWidth), getY(ridgeStart.y, logicalHeight, offsetY, heave));
-        ctx.lineTo(getX(ridgeStart.x, logicalWidth), getY(ridgeStart.y, logicalHeight, offsetY, heave));
+        ctx.fill();
 
         for (let i = 0; i < layer.ridgeNodes.length - 1; i++) {
           const c = layer.ridgeNodes[i], n = layer.ridgeNodes[i + 1];
