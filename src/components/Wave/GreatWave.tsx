@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './GreatWave.css';
 import {
   CONTROL_COLORS,
@@ -10,12 +10,12 @@ import {
   SEGMENT_HIT_RADIUS,
   WAVE_PALETTE,
   cloneLayer,
-  createInitialLayers,
 } from './waveDefaults';
 import { getDistToCubicBezier, splitCubicBezier } from './waveGeometry';
 import { createWaveExportPayload } from './waveExport';
 import type {
   HitTarget,
+  LayerPropField,
   NodeListType,
   WaveLayer,
   WaveNode,
@@ -41,6 +41,68 @@ const getY = (
 const getHeave = (elapsedMs: number, speed: number): number => {
   const t = elapsedMs * DEFAULT_ANIMATION_SETTINGS.timeScale * speed;
   return Math.sin(t) * DEFAULT_ANIMATION_SETTINGS.heaveAmplitudePx;
+};
+
+
+const fract = (v: number): number => v - Math.floor(v);
+
+const ribNoise = (x: number, y: number): number => {
+  const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+  return fract(n);
+};
+
+const fbmFoam = (x: number, y: number): number => {
+  let value = 0;
+  let amp = 0.55;
+  let freq = 1;
+  for (let i = 0; i < 4; i++) {
+    value += ribNoise(x * freq, y * freq) * amp;
+    freq *= 2.03;
+    amp *= 0.5;
+  }
+  return value;
+};
+
+const drawRibTextures = (
+  ctx: CanvasRenderingContext2D,
+  layer: WaveLayer,
+  width: number,
+  height: number,
+  elapsedMs: number,
+) => {
+  const textureW = Math.max(1, Math.round(work(width)));
+  const textureH = Math.max(1, Math.round(work(height)));
+  const data = ctx.createImageData(textureW, textureH);
+  const px = data.data;
+
+  const foamBias = 0.56 - layer.foamIntensity * 0.18;
+  const stripeFreq = Math.max(3, 1 / Math.max(0.025, layer.stripeSpacing));
+  const travel = elapsedMs * 0.00023 * layer.speed;
+
+  for (let y = 0; y < textureH; y++) {
+    const ny = y / textureH;
+    for (let x = 0; x < textureW; x++) {
+      const nx = x / textureW;
+      const i = (y * textureW + x) * 4;
+
+      const f = fbmFoam(nx * 4.5 * layer.foamScale + travel, ny * 4.5 * layer.foamScale - travel * 0.6);
+      const foamMask = Math.max(0, (f - foamBias) / Math.max(0.0001, 1 - foamBias));
+
+      const stripePhase = nx * stripeFreq + Math.sin((ny + travel) * 11.5) * 0.08;
+      const stripe = Math.pow(1 - Math.abs(Math.sin(stripePhase * Math.PI)), 5);
+
+      const foamAlpha = Math.round(foamMask * layer.foamIntensity * 205);
+      const stripeAlpha = Math.round(stripe * layer.stripeStrength * 120);
+      const a = Math.max(foamAlpha, stripeAlpha);
+
+      px[i] = 248;
+      px[i + 1] = 251;
+      px[i + 2] = 255;
+      px[i + 3] = Math.min(255, a);
+    }
+  }
+
+  ctx.putImageData(data, WS_MARGIN, WS_MARGIN);
 };
 
 const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
@@ -126,10 +188,17 @@ const GreatWave: React.FC = () => {
     handleImageUpload, handleUpdateRefImage, handleClearRefImage
   } = useWaveEditor();
 
+  const [showThirdsGuide, setShowThirdsGuide] = useState(true);
+  const [showHorizonGuide, setShowHorizonGuide] = useState(false);
+  const [horizonGuideY, setHorizonGuideY] = useState(0.36);
+
   const layersRef = useRef(layers);
   const activeIndexRef = useRef(activeLayerIndex);
   const showControlsRef = useRef(showControls);
   const showGridRef = useRef(showGrid);
+  const showThirdsGuideRef = useRef(showThirdsGuide);
+  const showHorizonGuideRef = useRef(showHorizonGuide);
+  const horizonGuideYRef = useRef(horizonGuideY);
   const hoveredTargetRef = useRef<HitTarget | null>(hoveredTarget);
   const isPlayingRef = useRef(isPlaying);
   const totalElapsedRef = useRef(0);
@@ -140,6 +209,9 @@ const GreatWave: React.FC = () => {
   useEffect(() => { activeIndexRef.current = safeActiveLayerIndex; }, [safeActiveLayerIndex]);
   useEffect(() => { showControlsRef.current = showControls; }, [showControls]);
   useEffect(() => { showGridRef.current = showGrid; }, [showGrid]);
+  useEffect(() => { showThirdsGuideRef.current = showThirdsGuide; }, [showThirdsGuide]);
+  useEffect(() => { showHorizonGuideRef.current = showHorizonGuide; }, [showHorizonGuide]);
+  useEffect(() => { horizonGuideYRef.current = horizonGuideY; }, [horizonGuideY]);
   useEffect(() => { hoveredTargetRef.current = hoveredTarget; }, [hoveredTarget]);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
 
@@ -230,6 +302,40 @@ const GreatWave: React.FC = () => {
 
       if (showControlsRef.current && showGridRef.current) drawGrid(ctx, logicalWidth, logicalHeight);
 
+      if (showControlsRef.current && showThirdsGuideRef.current) {
+        const w = work(logicalWidth);
+        const h = work(logicalHeight);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(161, 101, 47, 0.35)';
+        ctx.setLineDash([4, 6]);
+        ctx.beginPath();
+        ctx.moveTo(WS_MARGIN + w / 3, WS_MARGIN);
+        ctx.lineTo(WS_MARGIN + w / 3, WS_MARGIN + h);
+        ctx.moveTo(WS_MARGIN + (w * 2) / 3, WS_MARGIN);
+        ctx.lineTo(WS_MARGIN + (w * 2) / 3, WS_MARGIN + h);
+        ctx.moveTo(WS_MARGIN, WS_MARGIN + h / 3);
+        ctx.lineTo(WS_MARGIN + w, WS_MARGIN + h / 3);
+        ctx.moveTo(WS_MARGIN, WS_MARGIN + (h * 2) / 3);
+        ctx.lineTo(WS_MARGIN + w, WS_MARGIN + (h * 2) / 3);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (showControlsRef.current && showHorizonGuideRef.current) {
+        const y = WS_MARGIN + horizonGuideYRef.current * work(logicalHeight);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(23, 48, 78, 0.55)';
+        ctx.setLineDash([10, 6]);
+        ctx.beginPath();
+        ctx.moveTo(WS_MARGIN, y);
+        ctx.lineTo(WS_MARGIN + work(logicalWidth), y);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(23, 48, 78, 0.75)';
+        ctx.font = '11px sans-serif';
+        ctx.fillText('Horizon', WS_MARGIN + 8, y - 8);
+        ctx.restore();
+      }
+
       const currentLayers = layersRef.current;
       const activeIdx = activeIndexRef.current;
       const hovered = hoveredTargetRef.current;
@@ -265,6 +371,26 @@ const GreatWave: React.FC = () => {
         if (hollowEnd) ctx.lineTo(getX(1, logicalWidth), getY(hollowEnd.y, logicalHeight, offsetY, heave));
         ctx.lineTo(getX(1, logicalWidth), logicalHeight);
         ctx.closePath(); ctx.fill();
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(getX(0, logicalWidth), logicalHeight);
+        ctx.lineTo(getX(0, logicalWidth), getY(ridgeStart.y, logicalHeight, offsetY, heave));
+        ctx.lineTo(getX(ridgeStart.x, logicalWidth), getY(ridgeStart.y, logicalHeight, offsetY, heave));
+        for (let i = 0; i < layer.ridgeNodes.length - 1; i++) {
+          const c = layer.ridgeNodes[i], n = layer.ridgeNodes[i + 1];
+          ctx.bezierCurveTo(getX(c.cp2.x, logicalWidth), getY(c.cp2.y, logicalHeight, offsetY, heave), getX(n.cp1.x, logicalWidth), getY(n.cp1.y, logicalHeight, offsetY, heave), getX(n.x, logicalWidth), getY(n.y, logicalHeight, offsetY, heave));
+        }
+        for (let i = 0; i < layer.hollowNodes.length - 1; i++) {
+          const c = layer.hollowNodes[i], n = layer.hollowNodes[i + 1];
+          ctx.bezierCurveTo(getX(c.cp2.x, logicalWidth), getY(c.cp2.y, logicalHeight, offsetY, heave), getX(n.cp1.x, logicalWidth), getY(n.cp1.y, logicalHeight, offsetY, heave), getX(n.x, logicalWidth), getY(n.y, logicalHeight, offsetY, heave));
+        }
+        if (hollowEnd) ctx.lineTo(getX(1, logicalWidth), getY(hollowEnd.y, logicalHeight, offsetY, heave));
+        ctx.lineTo(getX(1, logicalWidth), logicalHeight);
+        ctx.closePath();
+        ctx.clip();
+        drawRibTextures(ctx, layer, logicalWidth, logicalHeight, totalElapsedRef.current);
+        ctx.restore();
       });
       ctx.restore();
 
@@ -305,7 +431,7 @@ const GreatWave: React.FC = () => {
     };
     frameId = requestAnimationFrame(render);
     return () => { cancelAnimationFrame(frameId); resizeObserver.disconnect(); };
-  }, [refImage]);
+  }, [refImage, refImageElemRef]);
 
   const handleMouseDown = (event: React.MouseEvent) => {
     if (!showControlsRef.current) return;
@@ -368,7 +494,7 @@ const GreatWave: React.FC = () => {
     if (hit && hit.type !== 'segment') {
       pushToHistory();
       setIsDragging(true);
-      setDragTarget(hit as any);
+      setDragTarget(hit);
       dragPrevPosRef.current = { x, y };
     }
   };
@@ -424,14 +550,18 @@ const GreatWave: React.FC = () => {
 
   const handleMouseUp = () => { setIsDragging(false); setDragTarget(null); dragPrevPosRef.current = null; };
 
-  const handleLayerPropChange = (field: any, value: string) => {
+  const handleLayerPropChange = (field: LayerPropField, value: string) => {
     pushToHistory();
     setLayers((prev) => {
       const idx = activeIndexRef.current;
       const nextLayers = [...prev];
       const layer = cloneLayer(prev[idx]);
-      if (field === 'id' || field === 'color') (layer as any)[field] = value;
-      else { const num = parseFloat(value); if (Number.isFinite(num)) (layer as any)[field] = num; }
+      if (field === 'id' || field === 'color') {
+        layer[field] = value;
+      } else {
+        const num = parseFloat(value);
+        if (Number.isFinite(num)) layer[field] = num;
+      }
       nextLayers[idx] = layer; return nextLayers;
     });
   };
@@ -462,10 +592,49 @@ const GreatWave: React.FC = () => {
       if (!cur) return prev;
       const nextLayers = [...prev];
       const res = createBlankLayerAt(idx);
-      nextLayers[idx] = { ...res, id: cur.id, color: cur.color, opacity: cur.opacity, offsetY: cur.offsetY, speed: cur.speed };
+      nextLayers[idx] = {
+        ...res,
+        id: cur.id,
+        color: cur.color,
+        opacity: cur.opacity,
+        offsetY: cur.offsetY,
+        speed: cur.speed,
+        foamIntensity: cur.foamIntensity,
+        foamScale: cur.foamScale,
+        stripeStrength: cur.stripeStrength,
+        stripeSpacing: cur.stripeSpacing,
+      };
       return nextLayers;
     });
     setHoveredTarget(null); setDragTarget(null); setIsDragging(false);
+  };
+
+  const handleApplyStylePreset = (preset: 'claw-crest' | 'spray-fractal' | 'undertow-band') => {
+    pushToHistory();
+    setLayers((prev) => {
+      const idx = activeIndexRef.current;
+      if (!prev[idx]) return prev;
+      const next = [...prev];
+      const layer = cloneLayer(prev[idx]);
+      if (preset === 'claw-crest') {
+        layer.foamIntensity = 0.92;
+        layer.foamScale = 1.3;
+        layer.stripeStrength = 0.48;
+        layer.stripeSpacing = 0.07;
+      } else if (preset === 'spray-fractal') {
+        layer.foamIntensity = 1;
+        layer.foamScale = 1.65;
+        layer.stripeStrength = 0.18;
+        layer.stripeSpacing = 0.12;
+      } else {
+        layer.foamIntensity = 0.35;
+        layer.foamScale = 0.85;
+        layer.stripeStrength = 0.62;
+        layer.stripeSpacing = 0.055;
+      }
+      next[idx] = layer;
+      return next;
+    });
   };
 
   const handleExport = async () => {
@@ -491,28 +660,68 @@ const GreatWave: React.FC = () => {
       </div>
 
       {showControls && (
-        <WaveSidebar
-          layers={layers} activeLayerIndex={safeActiveLayerIndex}
-          canvasWidthPx={canvasWidthPx} canvasHeightPx={canvasHeightPx}
-          showGrid={showGrid} sensitivity={sensitivity} isPlaying={isPlaying}
-          exportMessage={exportMessage}
-          onSelectLayer={setActiveLayerIndex}
-          onAddLayer={handleAddLayer}
-          onRemoveLayer={handleRemoveLayer}
-          onResetLayer={handleResetCurrentLayer}
-          onLayerPropChange={handleLayerPropChange}
-          onSensitivityToggle={() => setSensitivity(s => s === 'normal' ? 'low' : 'normal')}
-          onPlayToggle={() => setIsPlaying(!isPlaying)}
-          onCanvasWidthChange={setCanvasWidthPx}
-          onCanvasHeightChange={setCanvasHeightPx}
-          onGridToggle={setShowGrid}
-          onCanvasReset={() => { setCanvasWidthPx(DEFAULT_CANVAS_SETTINGS.widthPx); setCanvasHeightPx(DEFAULT_CANVAS_SETTINGS.heightPx); }}
-          onExport={handleExport}
-          referenceImage={refImage}
-          onImageUpload={handleImageUpload}
-          onUpdateImage={handleUpdateRefImage}
-          onClearImage={handleClearRefImage}
-        />
+        <>
+          <WaveSidebar
+            side="left"
+            layers={layers} activeLayerIndex={safeActiveLayerIndex}
+            canvasWidthPx={canvasWidthPx} canvasHeightPx={canvasHeightPx}
+            showGrid={showGrid} sensitivity={sensitivity} isPlaying={isPlaying}
+            exportMessage={exportMessage}
+            showThirdsGuide={showThirdsGuide}
+            showHorizonGuide={showHorizonGuide}
+            horizonGuideY={horizonGuideY}
+            onThirdsGuideToggle={setShowThirdsGuide}
+            onHorizonGuideToggle={setShowHorizonGuide}
+            onHorizonGuideYChange={setHorizonGuideY}
+            onSelectLayer={setActiveLayerIndex}
+            onAddLayer={handleAddLayer}
+            onRemoveLayer={handleRemoveLayer}
+            onResetLayer={handleResetCurrentLayer}
+            onLayerPropChange={handleLayerPropChange}
+            onApplyStylePreset={handleApplyStylePreset}
+            onSensitivityToggle={() => setSensitivity(s => s === 'normal' ? 'low' : 'normal')}
+            onPlayToggle={() => setIsPlaying(!isPlaying)}
+            onCanvasWidthChange={setCanvasWidthPx}
+            onCanvasHeightChange={setCanvasHeightPx}
+            onGridToggle={setShowGrid}
+            onCanvasReset={() => { setCanvasWidthPx(DEFAULT_CANVAS_SETTINGS.widthPx); setCanvasHeightPx(DEFAULT_CANVAS_SETTINGS.heightPx); }}
+            onExport={handleExport}
+            referenceImage={refImage}
+            onImageUpload={handleImageUpload}
+            onUpdateImage={handleUpdateRefImage}
+            onClearImage={handleClearRefImage}
+          />
+          <WaveSidebar
+            side="right"
+            layers={layers} activeLayerIndex={safeActiveLayerIndex}
+            canvasWidthPx={canvasWidthPx} canvasHeightPx={canvasHeightPx}
+            showGrid={showGrid} sensitivity={sensitivity} isPlaying={isPlaying}
+            exportMessage={exportMessage}
+            showThirdsGuide={showThirdsGuide}
+            showHorizonGuide={showHorizonGuide}
+            horizonGuideY={horizonGuideY}
+            onThirdsGuideToggle={setShowThirdsGuide}
+            onHorizonGuideToggle={setShowHorizonGuide}
+            onHorizonGuideYChange={setHorizonGuideY}
+            onSelectLayer={setActiveLayerIndex}
+            onAddLayer={handleAddLayer}
+            onRemoveLayer={handleRemoveLayer}
+            onResetLayer={handleResetCurrentLayer}
+            onLayerPropChange={handleLayerPropChange}
+            onApplyStylePreset={handleApplyStylePreset}
+            onSensitivityToggle={() => setSensitivity(s => s === 'normal' ? 'low' : 'normal')}
+            onPlayToggle={() => setIsPlaying(!isPlaying)}
+            onCanvasWidthChange={setCanvasWidthPx}
+            onCanvasHeightChange={setCanvasHeightPx}
+            onGridToggle={setShowGrid}
+            onCanvasReset={() => { setCanvasWidthPx(DEFAULT_CANVAS_SETTINGS.widthPx); setCanvasHeightPx(DEFAULT_CANVAS_SETTINGS.heightPx); }}
+            onExport={handleExport}
+            referenceImage={refImage}
+            onImageUpload={handleImageUpload}
+            onUpdateImage={handleUpdateRefImage}
+            onClearImage={handleClearRefImage}
+          />
+        </>
       )}
     </div>
   );

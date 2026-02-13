@@ -1,10 +1,10 @@
 import React from 'react';
-import type { WaveLayer, Sensitivity } from '../../waveTypes';
+import type { LayerPropField, WaveLayer, Sensitivity } from '../../waveTypes';
 
 interface LayerPropertiesSectionProps {
     currentLayer: WaveLayer;
     sensitivity: Sensitivity;
-    onPropChange: (field: any, val: string) => void;
+    onPropChange: (field: LayerPropField, val: string) => void;
     onSensitivityToggle: () => void;
 }
 
@@ -87,6 +87,70 @@ export const LayerPropertiesSection: React.FC<LayerPropertiesSectionProps> = ({
                         onChange={(e) => onPropChange('speed', e.target.value)}
                     />
                     <span>{currentLayer.speed.toFixed(1)}x</span>
+                </div>
+            </div>
+
+            <div className="prop-group">
+                <label>Foam Intensity</label>
+                <div className="range-wrapper">
+                    <input
+                        name="foamIntensity"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={currentLayer.foamIntensity}
+                        onChange={(e) => onPropChange('foamIntensity', e.target.value)}
+                    />
+                    <span>{Math.round(currentLayer.foamIntensity * 100)}%</span>
+                </div>
+            </div>
+
+            <div className="prop-group">
+                <label>Foam Scale</label>
+                <div className="range-wrapper">
+                    <input
+                        name="foamScale"
+                        type="range"
+                        min="0.4"
+                        max="2"
+                        step="0.05"
+                        value={currentLayer.foamScale}
+                        onChange={(e) => onPropChange('foamScale', e.target.value)}
+                    />
+                    <span>{currentLayer.foamScale.toFixed(2)}x</span>
+                </div>
+            </div>
+
+            <div className="prop-group">
+                <label>Vertical Stripe Strength</label>
+                <div className="range-wrapper">
+                    <input
+                        name="stripeStrength"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={currentLayer.stripeStrength}
+                        onChange={(e) => onPropChange('stripeStrength', e.target.value)}
+                    />
+                    <span>{Math.round(currentLayer.stripeStrength * 100)}%</span>
+                </div>
+            </div>
+
+            <div className="prop-group">
+                <label>Stripe Spacing</label>
+                <div className="range-wrapper">
+                    <input
+                        name="stripeSpacing"
+                        type="range"
+                        min="0.03"
+                        max="0.2"
+                        step="0.005"
+                        value={currentLayer.stripeSpacing}
+                        onChange={(e) => onPropChange('stripeSpacing', e.target.value)}
+                    />
+                    <span>{currentLayer.stripeSpacing.toFixed(3)}</span>
                 </div>
             </div>
 
