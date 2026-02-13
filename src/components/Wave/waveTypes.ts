@@ -18,6 +18,10 @@ export interface WaveLayer {
   opacity: number;
   offsetY: number;
   speed: number;
+  foamIntensity: number;
+  foamScale: number;
+  stripeStrength: number;
+  stripeSpacing: number;
   ridgeNodes: WaveNode[];
   hollowNodes: WaveNode[];
 }
@@ -42,6 +46,17 @@ export type HitTarget = NodeTarget | SegmentTarget;
 export type DragTarget = NodeTarget;
 
 export type Sensitivity = 'normal' | 'low';
+
+export type LayerPropField =
+  | 'id'
+  | 'color'
+  | 'opacity'
+  | 'offsetY'
+  | 'speed'
+  | 'foamIntensity'
+  | 'foamScale'
+  | 'stripeStrength'
+  | 'stripeSpacing';
 
 export interface CanvasSettings {
   widthPx: number;

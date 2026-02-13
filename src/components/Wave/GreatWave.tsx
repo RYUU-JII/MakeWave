@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './GreatWave.css';
 import {
   CONTROL_COLORS,
@@ -10,100 +10,33 @@ import {
   SEGMENT_HIT_RADIUS,
   WAVE_PALETTE,
   cloneLayer,
-  createInitialLayers,
 } from './waveDefaults';
 import { getDistToCubicBezier, splitCubicBezier } from './waveGeometry';
 import { createWaveExportPayload } from './waveExport';
+import {
+  WS_MARGIN,
+  clamp01,
+  drawCompositionGuides,
+  drawGrid,
+  drawLayerPath,
+  drawRibTextures,
+  getHeave,
+  getX,
+  getY,
+  work,
+} from './rendering/waveCanvas';
 import type {
   HitTarget,
+  LayerPropField,
   NodeListType,
-  WaveLayer,
   WaveNode,
 } from './waveTypes';
 import { useWaveEditor } from './hooks/useWaveEditor';
 import { WaveSidebar } from './components/Sidebar/WaveSidebar';
 import { ShortcutLegend } from './components/ShortcutLegend';
-
-const WS_MARGIN = 70;
-const work = (total: number) => Math.max(1, total - 2 * WS_MARGIN);
-const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-
-const getX = (x: number, width: number): number =>
-  Math.round(WS_MARGIN + x * work(width));
-
-const getY = (
-  y: number,
-  height: number,
-  offsetY: number,
-  heave: number,
-): number => Math.round(WS_MARGIN + y * work(height) + offsetY + heave);
-
-const getHeave = (elapsedMs: number, speed: number): number => {
-  const t = elapsedMs * DEFAULT_ANIMATION_SETTINGS.timeScale * speed;
-  return Math.sin(t) * DEFAULT_ANIMATION_SETTINGS.heaveAmplitudePx;
-};
-
-const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
-  ctx.save();
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
-  ctx.lineWidth = 1;
-  const w = work(width);
-  const h = work(height);
-  const step = 50;
-  ctx.beginPath();
-  for (let x = 0; x <= w; x += step) {
-    ctx.moveTo(WS_MARGIN + x, WS_MARGIN);
-    ctx.lineTo(WS_MARGIN + x, WS_MARGIN + h);
-  }
-  for (let y = 0; y <= h; y += step) {
-    ctx.moveTo(WS_MARGIN, WS_MARGIN + y);
-    ctx.lineTo(WS_MARGIN + w, WS_MARGIN + y);
-  }
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
-  ctx.setLineDash([5, 5]);
-  ctx.strokeRect(WS_MARGIN, WS_MARGIN, w, h);
-  ctx.restore();
-};
-
-const getNodeListByType = (layer: WaveLayer, listType: NodeListType): WaveNode[] =>
-  (listType === 'ridge' ? layer.ridgeNodes : layer.hollowNodes);
-
-const setNodeListByType = (layer: WaveLayer, listType: NodeListType, nodes: WaveNode[]): WaveLayer => {
-  if (listType === 'ridge') return { ...layer, ridgeNodes: nodes };
-  return { ...layer, hollowNodes: nodes };
-};
-
-const syncTip = (layer: WaveLayer, sourceList: NodeListType): WaveLayer => {
-  if (layer.ridgeNodes.length === 0 || layer.hollowNodes.length === 0) return layer;
-  const ridgeTipIndex = layer.ridgeNodes.length - 1;
-  const ridgeTip = layer.ridgeNodes[ridgeTipIndex];
-  const hollowTip = layer.hollowNodes[0];
-  if (sourceList === 'ridge') {
-    const dx = ridgeTip.x - hollowTip.x;
-    const dy = ridgeTip.y - hollowTip.y;
-    const nextHollow = [...layer.hollowNodes];
-    nextHollow[0] = {
-      ...hollowTip,
-      x: ridgeTip.x, y: ridgeTip.y,
-      cp1: { x: hollowTip.cp1.x + dx, y: hollowTip.cp1.y + dy },
-      cp2: { x: hollowTip.cp2.x + dx, y: hollowTip.cp2.y + dy },
-    };
-    return { ...layer, hollowNodes: nextHollow };
-  }
-  const dx = hollowTip.x - ridgeTip.x;
-  const dy = hollowTip.y - ridgeTip.y;
-  const nextRidge = [...layer.ridgeNodes];
-  nextRidge[ridgeTipIndex] = {
-    ...ridgeTip,
-    x: hollowTip.x, y: hollowTip.y,
-    cp1: { x: ridgeTip.cp1.x + dx, y: ridgeTip.cp1.y + dy },
-    cp2: { x: ridgeTip.cp2.x + dx, y: ridgeTip.cp2.y + dy },
-  };
-  return { ...layer, ridgeNodes: nextRidge };
-};
-
-const createNodeId = (): string => `n_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+import { createNodeId, getNodeListByType, setNodeListByType, syncTip } from './editor/layerEditing';
+import { applyStylePresetToLayer } from './presets/stylePresets';
+import type { StylePreset } from './presets/stylePresets';
 
 const GreatWave: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -126,10 +59,17 @@ const GreatWave: React.FC = () => {
     handleImageUpload, handleUpdateRefImage, handleClearRefImage
   } = useWaveEditor();
 
+  const [showThirdsGuide, setShowThirdsGuide] = useState(true);
+  const [showHorizonGuide, setShowHorizonGuide] = useState(false);
+  const [horizonGuideY, setHorizonGuideY] = useState(0.36);
+
   const layersRef = useRef(layers);
   const activeIndexRef = useRef(activeLayerIndex);
   const showControlsRef = useRef(showControls);
   const showGridRef = useRef(showGrid);
+  const showThirdsGuideRef = useRef(showThirdsGuide);
+  const showHorizonGuideRef = useRef(showHorizonGuide);
+  const horizonGuideYRef = useRef(horizonGuideY);
   const hoveredTargetRef = useRef<HitTarget | null>(hoveredTarget);
   const isPlayingRef = useRef(isPlaying);
   const totalElapsedRef = useRef(0);
@@ -140,6 +80,9 @@ const GreatWave: React.FC = () => {
   useEffect(() => { activeIndexRef.current = safeActiveLayerIndex; }, [safeActiveLayerIndex]);
   useEffect(() => { showControlsRef.current = showControls; }, [showControls]);
   useEffect(() => { showGridRef.current = showGrid; }, [showGrid]);
+  useEffect(() => { showThirdsGuideRef.current = showThirdsGuide; }, [showThirdsGuide]);
+  useEffect(() => { showHorizonGuideRef.current = showHorizonGuide; }, [showHorizonGuide]);
+  useEffect(() => { horizonGuideYRef.current = horizonGuideY; }, [horizonGuideY]);
   useEffect(() => { hoveredTargetRef.current = hoveredTarget; }, [hoveredTarget]);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
 
@@ -230,6 +173,17 @@ const GreatWave: React.FC = () => {
 
       if (showControlsRef.current && showGridRef.current) drawGrid(ctx, logicalWidth, logicalHeight);
 
+      if (showControlsRef.current) {
+        drawCompositionGuides(
+          ctx,
+          logicalWidth,
+          logicalHeight,
+          showThirdsGuideRef.current,
+          showHorizonGuideRef.current,
+          horizonGuideYRef.current,
+        );
+      }
+
       const currentLayers = layersRef.current;
       const activeIdx = activeIndexRef.current;
       const hovered = hoveredTargetRef.current;
@@ -244,27 +198,16 @@ const GreatWave: React.FC = () => {
         ctx.globalAlpha = (showControlsRef.current ? (isActive ? 1 : 0.2) : 1) * layer.opacity;
         const heave = getHeave(totalElapsedRef.current, layer.speed);
         const offsetY = layer.offsetY;
-        const ridgeStart = layer.ridgeNodes[0];
-        if (!ridgeStart) return;
-
-        ctx.beginPath();
+        const pathReady = drawLayerPath(ctx, layer, logicalWidth, logicalHeight, offsetY, heave);
+        if (!pathReady) return;
         ctx.fillStyle = layer.color;
-        ctx.moveTo(getX(0, logicalWidth), logicalHeight);
-        ctx.lineTo(getX(0, logicalWidth), getY(ridgeStart.y, logicalHeight, offsetY, heave));
-        ctx.lineTo(getX(ridgeStart.x, logicalWidth), getY(ridgeStart.y, logicalHeight, offsetY, heave));
+        ctx.fill();
 
-        for (let i = 0; i < layer.ridgeNodes.length - 1; i++) {
-          const c = layer.ridgeNodes[i], n = layer.ridgeNodes[i + 1];
-          ctx.bezierCurveTo(getX(c.cp2.x, logicalWidth), getY(c.cp2.y, logicalHeight, offsetY, heave), getX(n.cp1.x, logicalWidth), getY(n.cp1.y, logicalHeight, offsetY, heave), getX(n.x, logicalWidth), getY(n.y, logicalHeight, offsetY, heave));
-        }
-        for (let i = 0; i < layer.hollowNodes.length - 1; i++) {
-          const c = layer.hollowNodes[i], n = layer.hollowNodes[i + 1];
-          ctx.bezierCurveTo(getX(c.cp2.x, logicalWidth), getY(c.cp2.y, logicalHeight, offsetY, heave), getX(n.cp1.x, logicalWidth), getY(n.cp1.y, logicalHeight, offsetY, heave), getX(n.x, logicalWidth), getY(n.y, logicalHeight, offsetY, heave));
-        }
-        const hollowEnd = layer.hollowNodes[layer.hollowNodes.length - 1];
-        if (hollowEnd) ctx.lineTo(getX(1, logicalWidth), getY(hollowEnd.y, logicalHeight, offsetY, heave));
-        ctx.lineTo(getX(1, logicalWidth), logicalHeight);
-        ctx.closePath(); ctx.fill();
+        ctx.save();
+        drawLayerPath(ctx, layer, logicalWidth, logicalHeight, offsetY, heave);
+        ctx.clip();
+        drawRibTextures(ctx, layer, logicalWidth, logicalHeight, totalElapsedRef.current);
+        ctx.restore();
       });
       ctx.restore();
 
@@ -305,7 +248,7 @@ const GreatWave: React.FC = () => {
     };
     frameId = requestAnimationFrame(render);
     return () => { cancelAnimationFrame(frameId); resizeObserver.disconnect(); };
-  }, [refImage]);
+  }, [refImage, refImageElemRef]);
 
   const handleMouseDown = (event: React.MouseEvent) => {
     if (!showControlsRef.current) return;
@@ -368,7 +311,7 @@ const GreatWave: React.FC = () => {
     if (hit && hit.type !== 'segment') {
       pushToHistory();
       setIsDragging(true);
-      setDragTarget(hit as any);
+      setDragTarget(hit);
       dragPrevPosRef.current = { x, y };
     }
   };
@@ -424,14 +367,18 @@ const GreatWave: React.FC = () => {
 
   const handleMouseUp = () => { setIsDragging(false); setDragTarget(null); dragPrevPosRef.current = null; };
 
-  const handleLayerPropChange = (field: any, value: string) => {
+  const handleLayerPropChange = (field: LayerPropField, value: string) => {
     pushToHistory();
     setLayers((prev) => {
       const idx = activeIndexRef.current;
       const nextLayers = [...prev];
       const layer = cloneLayer(prev[idx]);
-      if (field === 'id' || field === 'color') (layer as any)[field] = value;
-      else { const num = parseFloat(value); if (Number.isFinite(num)) (layer as any)[field] = num; }
+      if (field === 'id' || field === 'color') {
+        layer[field] = value;
+      } else {
+        const num = parseFloat(value);
+        if (Number.isFinite(num)) layer[field] = num;
+      }
       nextLayers[idx] = layer; return nextLayers;
     });
   };
@@ -462,10 +409,33 @@ const GreatWave: React.FC = () => {
       if (!cur) return prev;
       const nextLayers = [...prev];
       const res = createBlankLayerAt(idx);
-      nextLayers[idx] = { ...res, id: cur.id, color: cur.color, opacity: cur.opacity, offsetY: cur.offsetY, speed: cur.speed };
+      nextLayers[idx] = {
+        ...res,
+        id: cur.id,
+        color: cur.color,
+        opacity: cur.opacity,
+        offsetY: cur.offsetY,
+        speed: cur.speed,
+        foamIntensity: cur.foamIntensity,
+        foamScale: cur.foamScale,
+        stripeStrength: cur.stripeStrength,
+        stripeSpacing: cur.stripeSpacing,
+      };
       return nextLayers;
     });
     setHoveredTarget(null); setDragTarget(null); setIsDragging(false);
+  };
+
+  const handleApplyStylePreset = (preset: StylePreset) => {
+    pushToHistory();
+    setLayers((prev) => {
+      const idx = activeIndexRef.current;
+      if (!prev[idx]) return prev;
+      const next = [...prev];
+      const layer = cloneLayer(prev[idx]);
+      next[idx] = applyStylePresetToLayer(layer, preset);
+      return next;
+    });
   };
 
   const handleExport = async () => {
@@ -491,28 +461,68 @@ const GreatWave: React.FC = () => {
       </div>
 
       {showControls && (
-        <WaveSidebar
-          layers={layers} activeLayerIndex={safeActiveLayerIndex}
-          canvasWidthPx={canvasWidthPx} canvasHeightPx={canvasHeightPx}
-          showGrid={showGrid} sensitivity={sensitivity} isPlaying={isPlaying}
-          exportMessage={exportMessage}
-          onSelectLayer={setActiveLayerIndex}
-          onAddLayer={handleAddLayer}
-          onRemoveLayer={handleRemoveLayer}
-          onResetLayer={handleResetCurrentLayer}
-          onLayerPropChange={handleLayerPropChange}
-          onSensitivityToggle={() => setSensitivity(s => s === 'normal' ? 'low' : 'normal')}
-          onPlayToggle={() => setIsPlaying(!isPlaying)}
-          onCanvasWidthChange={setCanvasWidthPx}
-          onCanvasHeightChange={setCanvasHeightPx}
-          onGridToggle={setShowGrid}
-          onCanvasReset={() => { setCanvasWidthPx(DEFAULT_CANVAS_SETTINGS.widthPx); setCanvasHeightPx(DEFAULT_CANVAS_SETTINGS.heightPx); }}
-          onExport={handleExport}
-          referenceImage={refImage}
-          onImageUpload={handleImageUpload}
-          onUpdateImage={handleUpdateRefImage}
-          onClearImage={handleClearRefImage}
-        />
+        <>
+          <WaveSidebar
+            side="left"
+            layers={layers} activeLayerIndex={safeActiveLayerIndex}
+            canvasWidthPx={canvasWidthPx} canvasHeightPx={canvasHeightPx}
+            showGrid={showGrid} sensitivity={sensitivity} isPlaying={isPlaying}
+            exportMessage={exportMessage}
+            showThirdsGuide={showThirdsGuide}
+            showHorizonGuide={showHorizonGuide}
+            horizonGuideY={horizonGuideY}
+            onThirdsGuideToggle={setShowThirdsGuide}
+            onHorizonGuideToggle={setShowHorizonGuide}
+            onHorizonGuideYChange={setHorizonGuideY}
+            onSelectLayer={setActiveLayerIndex}
+            onAddLayer={handleAddLayer}
+            onRemoveLayer={handleRemoveLayer}
+            onResetLayer={handleResetCurrentLayer}
+            onLayerPropChange={handleLayerPropChange}
+            onApplyStylePreset={handleApplyStylePreset}
+            onSensitivityToggle={() => setSensitivity(s => s === 'normal' ? 'low' : 'normal')}
+            onPlayToggle={() => setIsPlaying(!isPlaying)}
+            onCanvasWidthChange={setCanvasWidthPx}
+            onCanvasHeightChange={setCanvasHeightPx}
+            onGridToggle={setShowGrid}
+            onCanvasReset={() => { setCanvasWidthPx(DEFAULT_CANVAS_SETTINGS.widthPx); setCanvasHeightPx(DEFAULT_CANVAS_SETTINGS.heightPx); }}
+            onExport={handleExport}
+            referenceImage={refImage}
+            onImageUpload={handleImageUpload}
+            onUpdateImage={handleUpdateRefImage}
+            onClearImage={handleClearRefImage}
+          />
+          <WaveSidebar
+            side="right"
+            layers={layers} activeLayerIndex={safeActiveLayerIndex}
+            canvasWidthPx={canvasWidthPx} canvasHeightPx={canvasHeightPx}
+            showGrid={showGrid} sensitivity={sensitivity} isPlaying={isPlaying}
+            exportMessage={exportMessage}
+            showThirdsGuide={showThirdsGuide}
+            showHorizonGuide={showHorizonGuide}
+            horizonGuideY={horizonGuideY}
+            onThirdsGuideToggle={setShowThirdsGuide}
+            onHorizonGuideToggle={setShowHorizonGuide}
+            onHorizonGuideYChange={setHorizonGuideY}
+            onSelectLayer={setActiveLayerIndex}
+            onAddLayer={handleAddLayer}
+            onRemoveLayer={handleRemoveLayer}
+            onResetLayer={handleResetCurrentLayer}
+            onLayerPropChange={handleLayerPropChange}
+            onApplyStylePreset={handleApplyStylePreset}
+            onSensitivityToggle={() => setSensitivity(s => s === 'normal' ? 'low' : 'normal')}
+            onPlayToggle={() => setIsPlaying(!isPlaying)}
+            onCanvasWidthChange={setCanvasWidthPx}
+            onCanvasHeightChange={setCanvasHeightPx}
+            onGridToggle={setShowGrid}
+            onCanvasReset={() => { setCanvasWidthPx(DEFAULT_CANVAS_SETTINGS.widthPx); setCanvasHeightPx(DEFAULT_CANVAS_SETTINGS.heightPx); }}
+            onExport={handleExport}
+            referenceImage={refImage}
+            onImageUpload={handleImageUpload}
+            onUpdateImage={handleUpdateRefImage}
+            onClearImage={handleClearRefImage}
+          />
+        </>
       )}
     </div>
   );

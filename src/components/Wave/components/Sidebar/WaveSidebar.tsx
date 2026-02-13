@@ -1,10 +1,15 @@
-import type { WaveLayer, Sensitivity, ReferenceImage } from '../../waveTypes';
+import type { LayerPropField, WaveLayer, Sensitivity, ReferenceImage } from '../../waveTypes';
 import { CanvasSettingsSection } from './CanvasSettingsSection';
+import { CompositionGuideSection } from './CompositionGuideSection';
 import { LayerSection } from './LayerSection';
 import { LayerPropertiesSection } from './LayerPropertiesSection';
 import { ReferenceImageSection } from './ReferenceImageSection';
+import { StylePresetSection } from './StylePresetSection';
+import { StudioWorkflowSection } from './StudioWorkflowSection';
+import type { StylePreset } from '../../presets/stylePresets';
 
 interface WaveSidebarProps {
+    side: 'left' | 'right';
     layers: WaveLayer[];
     activeLayerIndex: number;
     canvasWidthPx: number;
@@ -13,11 +18,18 @@ interface WaveSidebarProps {
     sensitivity: Sensitivity;
     isPlaying: boolean;
     exportMessage: string;
+    showThirdsGuide: boolean;
+    showHorizonGuide: boolean;
+    horizonGuideY: number;
+    onThirdsGuideToggle: (value: boolean) => void;
+    onHorizonGuideToggle: (value: boolean) => void;
+    onHorizonGuideYChange: (value: number) => void;
     onSelectLayer: (idx: number) => void;
     onAddLayer: () => void;
     onRemoveLayer: (idx: number) => void;
     onResetLayer: () => void;
-    onLayerPropChange: (field: any, val: string) => void;
+    onLayerPropChange: (field: LayerPropField, val: string) => void;
+    onApplyStylePreset: (preset: StylePreset) => void;
     onSensitivityToggle: () => void;
     onPlayToggle: () => void;
     onCanvasWidthChange: (val: number) => void;
@@ -32,6 +44,7 @@ interface WaveSidebarProps {
 }
 
 export const WaveSidebar: React.FC<WaveSidebarProps> = ({
+    side,
     layers,
     activeLayerIndex,
     canvasWidthPx,
@@ -40,11 +53,18 @@ export const WaveSidebar: React.FC<WaveSidebarProps> = ({
     sensitivity,
     isPlaying,
     exportMessage,
+    showThirdsGuide,
+    showHorizonGuide,
+    horizonGuideY,
+    onThirdsGuideToggle,
+    onHorizonGuideToggle,
+    onHorizonGuideYChange,
     onSelectLayer,
     onAddLayer,
     onRemoveLayer,
     onResetLayer,
     onLayerPropChange,
+    onApplyStylePreset,
     onSensitivityToggle,
     onPlayToggle,
     onCanvasWidthChange,
@@ -60,9 +80,9 @@ export const WaveSidebar: React.FC<WaveSidebarProps> = ({
     const currentLayer = layers[activeLayerIndex];
 
     return (
-        <div className="wave-sidebar">
+        <aside className={`wave-sidebar ${side}`}>
             <header className="sidebar-header">
-                <h3>Wave Editor</h3>
+                <h3>{side === 'left' ? 'Composition' : 'Style Lab'}</h3>
                 <button
                     onClick={onPlayToggle}
                     className={`play-toggle ${!isPlaying ? 'paused' : ''}`}
@@ -71,50 +91,67 @@ export const WaveSidebar: React.FC<WaveSidebarProps> = ({
                 </button>
             </header>
 
-            <CanvasSettingsSection
-                widthPx={canvasWidthPx}
-                heightPx={canvasHeightPx}
-                showGrid={showGrid}
-                onWidthChange={onCanvasWidthChange}
-                onHeightChange={onCanvasHeightChange}
-                onGridToggle={onGridToggle}
-                onReset={onCanvasReset}
-            />
-
-            <LayerSection
-                layers={layers}
-                activeLayerIndex={activeLayerIndex}
-                onSelectLayer={onSelectLayer}
-                onRemoveLayer={onRemoveLayer}
-                onResetLayer={onResetLayer}
-            />
-
-            {currentLayer && (
-                <LayerPropertiesSection
-                    currentLayer={currentLayer}
-                    sensitivity={sensitivity}
-                    onPropChange={onLayerPropChange}
-                    onSensitivityToggle={onSensitivityToggle}
-                />
+            {side === 'left' ? (
+                <>
+                    <CompositionGuideSection
+                        showThirdsGuide={showThirdsGuide}
+                        showHorizonGuide={showHorizonGuide}
+                        horizonGuideY={horizonGuideY}
+                        onThirdsGuideToggle={onThirdsGuideToggle}
+                        onHorizonGuideToggle={onHorizonGuideToggle}
+                        onHorizonGuideYChange={onHorizonGuideYChange}
+                    />
+                    <CanvasSettingsSection
+                        widthPx={canvasWidthPx}
+                        heightPx={canvasHeightPx}
+                        showGrid={showGrid}
+                        onWidthChange={onCanvasWidthChange}
+                        onHeightChange={onCanvasHeightChange}
+                        onGridToggle={onGridToggle}
+                        onReset={onCanvasReset}
+                    />
+                    <LayerSection
+                        layers={layers}
+                        activeLayerIndex={activeLayerIndex}
+                        onSelectLayer={onSelectLayer}
+                        onRemoveLayer={onRemoveLayer}
+                        onResetLayer={onResetLayer}
+                    />
+                    <ReferenceImageSection
+                        referenceImage={referenceImage}
+                        onImageUpload={onImageUpload}
+                        onUpdateImage={onUpdateImage}
+                        onClear={onClearImage}
+                    />
+                </>
+            ) : (
+                <>
+                    {currentLayer && (
+                        <LayerPropertiesSection
+                            currentLayer={currentLayer}
+                            sensitivity={sensitivity}
+                            onPropChange={onLayerPropChange}
+                            onSensitivityToggle={onSensitivityToggle}
+                        />
+                    )}
+                    <StylePresetSection onApplyPreset={onApplyStylePreset} />
+                    <StudioWorkflowSection />
+                </>
             )}
 
-            <ReferenceImageSection
-                referenceImage={referenceImage}
-                onImageUpload={onImageUpload}
-                onUpdateImage={onUpdateImage}
-                onClear={onClearImage}
-            />
-
-            {exportMessage && <div className="export-message">{exportMessage}</div>}
+            {exportMessage && side === 'right' && <div className="export-message">{exportMessage}</div>}
 
             <footer className="sidebar-footer">
-                <button className="sidebar-add-btn" onClick={onAddLayer}>
-                    Add Layer
-                </button>
-                <button className="json-btn" onClick={onExport}>
-                    Export Scene
-                </button>
+                {side === 'left' ? (
+                    <button className="sidebar-add-btn" onClick={onAddLayer}>
+                        Add Layer
+                    </button>
+                ) : (
+                    <button className="json-btn" onClick={onExport}>
+                        Export Scene
+                    </button>
+                )}
             </footer>
-        </div>
+        </aside>
     );
 };
