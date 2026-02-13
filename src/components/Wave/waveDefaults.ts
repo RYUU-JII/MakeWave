@@ -81,6 +81,10 @@ const BASIC_WAVE_TEMPLATE: WaveLayer = {
   opacity: 1,
   offsetY: 0,
   speed: 1,
+  foamIntensity: 0.35,
+  foamScale: 1,
+  stripeStrength: 0.2,
+  stripeSpacing: 0.09,
   ridgeNodes: [
     createNode('r0', 0, 0.62, 0, 0.62, 0.24, 0.62),
     createNode('r1', 0.48, 0.62, 0.26, 0.62, 0.48, 0.62, true),
@@ -97,6 +101,10 @@ const GREAT_WAVE_PRESET: WaveLayer = {
   opacity: 1,
   offsetY: 0,
   speed: 1,
+  foamIntensity: 0.35,
+  foamScale: 1,
+  stripeStrength: 0.2,
+  stripeSpacing: 0.09,
   ridgeNodes: [
     createNode('r0', -0.0077, 0.4067, -0.0077, 0.4067, 0.1729, 0.3442),
     createNode('n_1', 0.2697, 0.1117, 0.1773, 0.154, 0.3348, 0.0818),

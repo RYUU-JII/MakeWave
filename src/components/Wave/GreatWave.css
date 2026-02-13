@@ -1,5 +1,5 @@
 .wave-editor-outer {
-  --wave-sidebar-width: 320px;
+  --wave-sidebar-width: 300px;
   width: 100%;
   min-height: 100vh;
   display: flex;
@@ -7,11 +7,12 @@
   align-items: center;
   position: relative;
   padding: 20px 16px;
-  transition: padding-right 0.12s ease-out;
+  transition: padding 0.12s ease-out;
 }
 
 .wave-editor-outer.with-sidebar {
-  padding-right: calc(var(--wave-sidebar-width) + 16px);
+  padding-left: calc(var(--wave-sidebar-width) + 24px);
+  padding-right: calc(var(--wave-sidebar-width) + 24px);
 }
 
 .wave-editor-container {
@@ -23,6 +24,7 @@
   background: #fdf5e6;
   border-radius: 20px;
   transition: width 0.12s ease-out, height 0.12s ease-out;
+  box-shadow: 0 8px 28px rgba(26, 58, 95, 0.12);
 }
 
 .wave-editor-canvas {
@@ -34,21 +36,30 @@
 .wave-sidebar {
   position: fixed;
   top: 0;
-  right: 0;
   width: var(--wave-sidebar-width);
   height: 100vh;
   max-height: 100vh;
   overflow-y: auto;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.93);
   backdrop-filter: blur(8px);
-  border-left: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 12px 0 0 12px;
   display: flex;
   flex-direction: column;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
   font-family: 'Noto Sans KR', 'Pretendard', sans-serif;
   color: #1a1a1a;
   z-index: 100;
+}
+
+.wave-sidebar.left {
+  left: 0;
+  border-right: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 0 12px 12px 0;
+}
+
+.wave-sidebar.right {
+  right: 0;
+  border-left: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px 0 0 12px;
 }
 
 .sidebar-header {
@@ -98,11 +109,18 @@
   align-items: center;
 }
 
+.section-help {
+  margin: 8px 0 0;
+  font-size: 10px;
+  color: #6c6c6c;
+  line-height: 1.45;
+}
+
 .layer-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 130px;
+  max-height: 140px;
   overflow-y: auto;
 }
 
@@ -209,7 +227,7 @@
 
 .range-wrapper span {
   font-size: 10px;
-  min-width: 32px;
+  min-width: 36px;
   text-align: right;
 }
 
@@ -235,27 +253,6 @@
   color: #fff;
 }
 
-.point-color-guide {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.point-guide-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: #444;
-}
-
-.legend-dot {
-  width: 100px;
-  height: 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.2);
-}
-
 .reference-image-section .upload-container {
   padding: 16px;
   border: 2px dashed rgba(0, 0, 0, 0.1);
@@ -269,7 +266,39 @@
   background: rgba(26, 58, 95, 0.05);
 }
 
+.preset-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr;
+}
+
+.preset-btn {
+  border: 1px solid rgba(26, 58, 95, 0.22);
+  background: rgba(26, 58, 95, 0.05);
+  color: #1a3a5f;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 11px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.preset-btn:hover {
+  background: rgba(26, 58, 95, 0.12);
+}
+
+.workflow-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: #454545;
+  line-height: 1.5;
+  display: grid;
+  gap: 4px;
+}
+
 .sidebar-footer {
+  margin-top: auto;
   padding: 10px;
   background: rgba(0, 0, 0, 0.02);
   display: flex;
@@ -278,7 +307,7 @@
 
 .json-btn,
 .sidebar-add-btn {
-  flex: 1;
+  width: 100%;
   padding: 8px;
   color: #fff;
   border: none;
@@ -296,7 +325,7 @@
 }
 
 .export-message {
-  margin: 0 10px 10px;
+  margin: 10px;
   padding: 6px 8px;
   border-radius: 6px;
   font-size: 11px;
@@ -356,6 +385,17 @@
   transform: translateY(-1px);
 }
 
+@media (max-width: 1200px) {
+  .wave-editor-outer.with-sidebar {
+    padding-left: 16px;
+    padding-right: calc(var(--wave-sidebar-width) + 20px);
+  }
+
+  .wave-sidebar.left {
+    display: none;
+  }
+}
+
 @media (max-width: 768px) {
   .wave-editor-outer.with-sidebar {
     padding-right: 10px;
@@ -380,8 +420,13 @@
     height: 55vh;
     max-height: 55vh;
     border-left: none;
+    border-right: none;
     border-top: 1px solid rgba(0, 0, 0, 0.12);
     border-radius: 14px 14px 0 0;
+  }
+
+  .wave-sidebar.left {
+    display: none;
   }
 
   .shortcut-legend {
