@@ -6,7 +6,6 @@ import { LayerPropertiesSection } from './LayerPropertiesSection';
 import { ReferenceImageSection } from './ReferenceImageSection';
 import { StylePresetSection } from './StylePresetSection';
 import { StudioWorkflowSection } from './StudioWorkflowSection';
-import type { StylePreset } from '../../presets/stylePresets';
 
 interface WaveSidebarProps {
     side: 'left' | 'right';
@@ -29,7 +28,7 @@ interface WaveSidebarProps {
     onRemoveLayer: (idx: number) => void;
     onResetLayer: () => void;
     onLayerPropChange: (field: LayerPropField, val: string) => void;
-    onApplyStylePreset: (preset: StylePreset) => void;
+    onApplyStylePreset: (preset: 'claw-crest' | 'spray-fractal' | 'undertow-band') => void;
     onSensitivityToggle: () => void;
     onPlayToggle: () => void;
     onCanvasWidthChange: (val: number) => void;

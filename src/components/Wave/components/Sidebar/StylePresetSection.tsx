@@ -1,8 +1,7 @@
 import React from 'react';
-import type { StylePreset } from '../../presets/stylePresets';
 
 interface StylePresetSectionProps {
-    onApplyPreset: (preset: StylePreset) => void;
+    onApplyPreset: (preset: 'claw-crest' | 'spray-fractal' | 'undertow-band') => void;
 }
 
 export const StylePresetSection: React.FC<StylePresetSectionProps> = ({ onApplyPreset }) => {

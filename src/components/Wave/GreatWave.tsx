@@ -34,9 +34,149 @@ import type {
 import { useWaveEditor } from './hooks/useWaveEditor';
 import { WaveSidebar } from './components/Sidebar/WaveSidebar';
 import { ShortcutLegend } from './components/ShortcutLegend';
-import { createNodeId, getNodeListByType, setNodeListByType, syncTip } from './editor/layerEditing';
-import { applyStylePresetToLayer } from './presets/stylePresets';
-import type { StylePreset } from './presets/stylePresets';
+  
+const WS_MARGIN = 70;
+const work = (total: number) => Math.max(1, total - 2 * WS_MARGIN);
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+const getX = (x: number, width: number): number =>
+  Math.round(WS_MARGIN + x * work(width));
+
+const getY = (
+  y: number,
+  height: number,
+  offsetY: number,
+  heave: number,
+): number => Math.round(WS_MARGIN + y * work(height) + offsetY + heave);
+
+const getHeave = (elapsedMs: number, speed: number): number => {
+  const t = elapsedMs * DEFAULT_ANIMATION_SETTINGS.timeScale * speed;
+  return Math.sin(t) * DEFAULT_ANIMATION_SETTINGS.heaveAmplitudePx;
+};
+
+
+const fract = (v: number): number => v - Math.floor(v);
+
+const ribNoise = (x: number, y: number): number => {
+  const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+  return fract(n);
+};
+
+const fbmFoam = (x: number, y: number): number => {
+  let value = 0;
+  let amp = 0.55;
+  let freq = 1;
+  for (let i = 0; i < 4; i++) {
+    value += ribNoise(x * freq, y * freq) * amp;
+    freq *= 2.03;
+    amp *= 0.5;
+  }
+  return value;
+};
+
+const drawRibTextures = (
+  ctx: CanvasRenderingContext2D,
+  layer: WaveLayer,
+  width: number,
+  height: number,
+  elapsedMs: number,
+) => {
+  const textureW = Math.max(1, Math.round(work(width)));
+  const textureH = Math.max(1, Math.round(work(height)));
+  const data = ctx.createImageData(textureW, textureH);
+  const px = data.data;
+
+  const foamBias = 0.56 - layer.foamIntensity * 0.18;
+  const stripeFreq = Math.max(3, 1 / Math.max(0.025, layer.stripeSpacing));
+  const travel = elapsedMs * 0.00023 * layer.speed;
+
+  for (let y = 0; y < textureH; y++) {
+    const ny = y / textureH;
+    for (let x = 0; x < textureW; x++) {
+      const nx = x / textureW;
+      const i = (y * textureW + x) * 4;
+
+      const f = fbmFoam(nx * 4.5 * layer.foamScale + travel, ny * 4.5 * layer.foamScale - travel * 0.6);
+      const foamMask = Math.max(0, (f - foamBias) / Math.max(0.0001, 1 - foamBias));
+
+      const stripePhase = nx * stripeFreq + Math.sin((ny + travel) * 11.5) * 0.08;
+      const stripe = Math.pow(1 - Math.abs(Math.sin(stripePhase * Math.PI)), 5);
+
+      const foamAlpha = Math.round(foamMask * layer.foamIntensity * 205);
+      const stripeAlpha = Math.round(stripe * layer.stripeStrength * 120);
+      const a = Math.max(foamAlpha, stripeAlpha);
+
+      px[i] = 248;
+      px[i + 1] = 251;
+      px[i + 2] = 255;
+      px[i + 3] = Math.min(255, a);
+    }
+  }
+
+  ctx.putImageData(data, WS_MARGIN, WS_MARGIN);
+};
+
+const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
+  ctx.lineWidth = 1;
+  const w = work(width);
+  const h = work(height);
+  const step = 50;
+  ctx.beginPath();
+  for (let x = 0; x <= w; x += step) {
+    ctx.moveTo(WS_MARGIN + x, WS_MARGIN);
+    ctx.lineTo(WS_MARGIN + x, WS_MARGIN + h);
+  }
+  for (let y = 0; y <= h; y += step) {
+    ctx.moveTo(WS_MARGIN, WS_MARGIN + y);
+    ctx.lineTo(WS_MARGIN + w, WS_MARGIN + y);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+  ctx.setLineDash([5, 5]);
+  ctx.strokeRect(WS_MARGIN, WS_MARGIN, w, h);
+  ctx.restore();
+};
+
+const getNodeListByType = (layer: WaveLayer, listType: NodeListType): WaveNode[] =>
+  (listType === 'ridge' ? layer.ridgeNodes : layer.hollowNodes);
+
+const setNodeListByType = (layer: WaveLayer, listType: NodeListType, nodes: WaveNode[]): WaveLayer => {
+  if (listType === 'ridge') return { ...layer, ridgeNodes: nodes };
+  return { ...layer, hollowNodes: nodes };
+};
+
+const syncTip = (layer: WaveLayer, sourceList: NodeListType): WaveLayer => {
+  if (layer.ridgeNodes.length === 0 || layer.hollowNodes.length === 0) return layer;
+  const ridgeTipIndex = layer.ridgeNodes.length - 1;
+  const ridgeTip = layer.ridgeNodes[ridgeTipIndex];
+  const hollowTip = layer.hollowNodes[0];
+  if (sourceList === 'ridge') {
+    const dx = ridgeTip.x - hollowTip.x;
+    const dy = ridgeTip.y - hollowTip.y;
+    const nextHollow = [...layer.hollowNodes];
+    nextHollow[0] = {
+      ...hollowTip,
+      x: ridgeTip.x, y: ridgeTip.y,
+      cp1: { x: hollowTip.cp1.x + dx, y: hollowTip.cp1.y + dy },
+      cp2: { x: hollowTip.cp2.x + dx, y: hollowTip.cp2.y + dy },
+    };
+    return { ...layer, hollowNodes: nextHollow };
+  }
+  const dx = hollowTip.x - ridgeTip.x;
+  const dy = hollowTip.y - ridgeTip.y;
+  const nextRidge = [...layer.ridgeNodes];
+  nextRidge[ridgeTipIndex] = {
+    ...ridgeTip,
+    x: hollowTip.x, y: hollowTip.y,
+    cp1: { x: ridgeTip.cp1.x + dx, y: ridgeTip.cp1.y + dy },
+    cp2: { x: ridgeTip.cp2.x + dx, y: ridgeTip.cp2.y + dy },
+  };
+  return { ...layer, ridgeNodes: nextRidge };
+};
+
+const createNodeId = (): string => `n_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
 const GreatWave: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -173,15 +313,38 @@ const GreatWave: React.FC = () => {
 
       if (showControlsRef.current && showGridRef.current) drawGrid(ctx, logicalWidth, logicalHeight);
 
-      if (showControlsRef.current) {
-        drawCompositionGuides(
-          ctx,
-          logicalWidth,
-          logicalHeight,
-          showThirdsGuideRef.current,
-          showHorizonGuideRef.current,
-          horizonGuideYRef.current,
-        );
+      if (showControlsRef.current && showThirdsGuideRef.current) {
+        const w = work(logicalWidth);
+        const h = work(logicalHeight);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(161, 101, 47, 0.35)';
+        ctx.setLineDash([4, 6]);
+        ctx.beginPath();
+        ctx.moveTo(WS_MARGIN + w / 3, WS_MARGIN);
+        ctx.lineTo(WS_MARGIN + w / 3, WS_MARGIN + h);
+        ctx.moveTo(WS_MARGIN + (w * 2) / 3, WS_MARGIN);
+        ctx.lineTo(WS_MARGIN + (w * 2) / 3, WS_MARGIN + h);
+        ctx.moveTo(WS_MARGIN, WS_MARGIN + h / 3);
+        ctx.lineTo(WS_MARGIN + w, WS_MARGIN + h / 3);
+        ctx.moveTo(WS_MARGIN, WS_MARGIN + (h * 2) / 3);
+        ctx.lineTo(WS_MARGIN + w, WS_MARGIN + (h * 2) / 3);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (showControlsRef.current && showHorizonGuideRef.current) {
+        const y = WS_MARGIN + horizonGuideYRef.current * work(logicalHeight);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(23, 48, 78, 0.55)';
+        ctx.setLineDash([10, 6]);
+        ctx.beginPath();
+        ctx.moveTo(WS_MARGIN, y);
+        ctx.lineTo(WS_MARGIN + work(logicalWidth), y);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(23, 48, 78, 0.75)';
+        ctx.font = '11px sans-serif';
+        ctx.fillText('Horizon', WS_MARGIN + 8, y - 8);
+        ctx.restore();
       }
 
       const currentLayers = layersRef.current;
@@ -203,8 +366,35 @@ const GreatWave: React.FC = () => {
         ctx.fillStyle = layer.color;
         ctx.fill();
 
+        for (let i = 0; i < layer.ridgeNodes.length - 1; i++) {
+          const c = layer.ridgeNodes[i], n = layer.ridgeNodes[i + 1];
+          ctx.bezierCurveTo(getX(c.cp2.x, logicalWidth), getY(c.cp2.y, logicalHeight, offsetY, heave), getX(n.cp1.x, logicalWidth), getY(n.cp1.y, logicalHeight, offsetY, heave), getX(n.x, logicalWidth), getY(n.y, logicalHeight, offsetY, heave));
+        }
+        for (let i = 0; i < layer.hollowNodes.length - 1; i++) {
+          const c = layer.hollowNodes[i], n = layer.hollowNodes[i + 1];
+          ctx.bezierCurveTo(getX(c.cp2.x, logicalWidth), getY(c.cp2.y, logicalHeight, offsetY, heave), getX(n.cp1.x, logicalWidth), getY(n.cp1.y, logicalHeight, offsetY, heave), getX(n.x, logicalWidth), getY(n.y, logicalHeight, offsetY, heave));
+        }
+        const hollowEnd = layer.hollowNodes[layer.hollowNodes.length - 1];
+        if (hollowEnd) ctx.lineTo(getX(1, logicalWidth), getY(hollowEnd.y, logicalHeight, offsetY, heave));
+        ctx.lineTo(getX(1, logicalWidth), logicalHeight);
+        ctx.closePath(); ctx.fill();
+
         ctx.save();
-        drawLayerPath(ctx, layer, logicalWidth, logicalHeight, offsetY, heave);
+        ctx.beginPath();
+        ctx.moveTo(getX(0, logicalWidth), logicalHeight);
+        ctx.lineTo(getX(0, logicalWidth), getY(ridgeStart.y, logicalHeight, offsetY, heave));
+        ctx.lineTo(getX(ridgeStart.x, logicalWidth), getY(ridgeStart.y, logicalHeight, offsetY, heave));
+        for (let i = 0; i < layer.ridgeNodes.length - 1; i++) {
+          const c = layer.ridgeNodes[i], n = layer.ridgeNodes[i + 1];
+          ctx.bezierCurveTo(getX(c.cp2.x, logicalWidth), getY(c.cp2.y, logicalHeight, offsetY, heave), getX(n.cp1.x, logicalWidth), getY(n.cp1.y, logicalHeight, offsetY, heave), getX(n.x, logicalWidth), getY(n.y, logicalHeight, offsetY, heave));
+        }
+        for (let i = 0; i < layer.hollowNodes.length - 1; i++) {
+          const c = layer.hollowNodes[i], n = layer.hollowNodes[i + 1];
+          ctx.bezierCurveTo(getX(c.cp2.x, logicalWidth), getY(c.cp2.y, logicalHeight, offsetY, heave), getX(n.cp1.x, logicalWidth), getY(n.cp1.y, logicalHeight, offsetY, heave), getX(n.x, logicalWidth), getY(n.y, logicalHeight, offsetY, heave));
+        }
+        if (hollowEnd) ctx.lineTo(getX(1, logicalWidth), getY(hollowEnd.y, logicalHeight, offsetY, heave));
+        ctx.lineTo(getX(1, logicalWidth), logicalHeight);
+        ctx.closePath();
         ctx.clip();
         drawRibTextures(ctx, layer, logicalWidth, logicalHeight, totalElapsedRef.current);
         ctx.restore();
@@ -426,14 +616,30 @@ const GreatWave: React.FC = () => {
     setHoveredTarget(null); setDragTarget(null); setIsDragging(false);
   };
 
-  const handleApplyStylePreset = (preset: StylePreset) => {
+  const handleApplyStylePreset = (preset: 'claw-crest' | 'spray-fractal' | 'undertow-band') => {
     pushToHistory();
     setLayers((prev) => {
       const idx = activeIndexRef.current;
       if (!prev[idx]) return prev;
       const next = [...prev];
       const layer = cloneLayer(prev[idx]);
-      next[idx] = applyStylePresetToLayer(layer, preset);
+      if (preset === 'claw-crest') {
+        layer.foamIntensity = 0.92;
+        layer.foamScale = 1.3;
+        layer.stripeStrength = 0.48;
+        layer.stripeSpacing = 0.07;
+      } else if (preset === 'spray-fractal') {
+        layer.foamIntensity = 1;
+        layer.foamScale = 1.65;
+        layer.stripeStrength = 0.18;
+        layer.stripeSpacing = 0.12;
+      } else {
+        layer.foamIntensity = 0.35;
+        layer.foamScale = 0.85;
+        layer.stripeStrength = 0.62;
+        layer.stripeSpacing = 0.055;
+      }
+      next[idx] = layer;
       return next;
     });
   };
